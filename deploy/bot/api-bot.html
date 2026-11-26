@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI 问答机器人 · 水泽山</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:system-ui,-apple-system,sans-serif;background:#0d1512;color:#cfe3d8;display:flex;flex-direction:column;height:100vh}
+  header{padding:14px 18px;background:#12211b;border-bottom:1px solid #1e3328;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  header .ttl{flex:1;min-width:180px}
+  header h1{font-size:16px;color:#7ec8e3}
+  header p{font-size:12px;color:#6a8a7c;margin-top:3px}
+  .badge{font-size:12px;padding:6px 11px;border-radius:20px;border:1px solid #2a4536;background:#16241d;color:#9ad7c0;white-space:nowrap}
+  .badge.admin{border-color:#7ec8e3;color:#7ec8e3}
+  .badge.zero{border-color:#5a4a2a;color:#e8c98a}
+  .badge.guest{border-color:#5a2a2a;color:#e8a0a0}
+  a.login,button.login{font-size:12px;color:#7ec8e3;text-decoration:none;border:1px solid #2a4536;border-radius:8px;padding:7px 12px;white-space:nowrap;background:transparent;cursor:pointer}
+  a.login:hover,button.login:hover{border-color:#7ec8e3}
+  #chat{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px}
+  .msg{max-width:88%;padding:10px 14px;border-radius:12px;line-height:1.6;font-size:14px;white-space:pre-wrap;word-break:break-word}
+  .user{align-self:flex-end;background:#1e3a5f;color:#dbeafe;border-bottom-right-radius:3px}
+  .bot{align-self:flex-start;background:#16241d;border:1px solid #23402f;border-bottom-left-radius:3px}
+  .bot.err{color:#e8a0a0;border-color:#5a2a2a}
+  .bot.notice{color:#e8c98a;border-color:#5a4a2a}
+  .typing{color:#6a8a7c;font-size:13px;align-self:flex-start}
+  .gate{align-self:center;text-align:center;max-width:460px;margin:auto;padding:24px}
+  .gate h2{font-size:17px;color:#7ec8e3;margin-bottom:10px}
+  .gate p{font-size:14px;line-height:1.8;color:#9db8aa;margin-bottom:16px}
+  .gate .steps{text-align:left;font-size:13px;color:#8fb3a1;line-height:2;background:#12211b;border:1px solid #1e3328;border-radius:10px;padding:14px 18px;margin-bottom:18px}
+  .gate .btn{display:inline-block}
+  .gate code{background:#0b1712;padding:1px 5px;border-radius:4px;font-size:12px;color:#9ad7c0;word-break:break-all}
+  footer{padding:12px;border-top:1px solid #1e3328;background:#12211b;display:flex;gap:8px}
+  input#q{flex:1;background:#0a120e;border:1px solid #2a4536;border-radius:8px;padding:10px 12px;color:#cfe3d8;font-size:14px;outline:none}
+  input#q:focus{border-color:#7ec8e3}
+  .btn{background:#1a4a5e;color:#fff;border:none;border-radius:8px;padding:9px 14px;font-size:13px;cursor:pointer;text-align:center}
+  .btn:disabled{opacity:.5;cursor:not-allowed}
+  .btn.ghost{background:#16241d;border:1px solid #2a4536;color:#9ad7c0}
+  .msg.md{white-space:normal}
+  .msg.md p{margin:0 0 6px}
+  .msg.md p:last-child{margin-bottom:0}
+  .msg.md h1,.msg.md h2,.msg.md h3,.msg.md h4{font-size:15px;color:#7ec8e3;margin:8px 0 4px}
+  .msg.md h1:first-child,.msg.md h2:first-child{margin-top:0}
+  .msg.md ul,.msg.md ol{margin:4px 0 6px 20px;padding:0}
+  .msg.md li{margin:2px 0}
+  .msg.md strong{color:#eaf7f0;font-weight:600}
+  .msg.md em{color:#a8d8c4}
+  .msg.md code{background:#0b1712;padding:1px 5px;border-radius:4px;font-family:ui-monospace,Consolas,monospace;font-size:12px;color:#9ad7c0}
+  .msg.md pre{background:#0a120e;border:1px solid #23402f;border-radius:8px;padding:10px;overflow-x:auto;margin:6px 0}
+  .msg.md pre code{background:none;padding:0;font-size:12px}
+  .msg.md a{color:#7ec8e3;text-decoration:underline;word-break:break-all}
+  @media(max-width:600px){.msg.md{font-size:13px}.msg.md ul,.msg.md ol{margin-left:16px}}
+</style>
+</head>
+<body>
+<header>
+  <div class="ttl">
+    <h1>🤖 AI 问答机器人</h1>
+    <p>登录后即可对话 · 发布文章或评论可获更多次数</p>
+  </div>
+  <span class="badge" id="badge">正在检查登录状态…</span>
+  <button class="login" id="loginLink" onclick="goLogin()" style="display:none">登录 / 注册</button>
+</header>
+
+<div id="chat"></div>
+<footer>
+  <input id="q" placeholder="登录后即可提问，回车发送" onkeydown="if(event.key==='Enter')send()">
+  <button id="btn" class="btn" onclick="send()">发送</button>
+</footer>
+
+<script>
+/* ============================================================
+ * v5 身份链路（2026-11-24 最终重构，彻底终结反复问题）
+ *   - 前端不做任何签名/nonce（HMAC 方案在纯前端根本不成立）
+ *   - 同源请求 /bot-api/status、/bot-api/chat，浏览器自动携带 Halo 登录 Cookie
+ *   - 后端用原生 http.request 显式设 Host 把 Cookie 转发给 Halo，让 Halo 亲自判身份
+ *   - 可信、不可伪造、内外网一致
+ * ============================================================ */
+
+var chat=document.getElementById('chat'),q=document.getElementById('q'),btn=document.getElementById('btn');
+var badge=document.getElementById('badge'),loginLink=document.getElementById('loginLink');
+var state={loggedIn:false,admin:false,remaining:0,needLogin:true},busy=false,ready=false;
+var API_BASE='/bot-api';
+
+/* ---------- Markdown 渲染（与 AI 分身页一致） ---------- */
+function esc(s){return String(s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
+function md(src){
+  var s=esc(src),store=[];
+  function stash(h){store.push(h);return '\u0001'+(store.length-1)+'\u0001'}
+  s=s.replace(/```([\s\S]*?)```/g,function(m,c){var ls=c.split('\n');if(ls.length&&/^[a-zA-Z0-9+#.\-]*$/.test(ls[0].trim())&&ls[0].trim())ls.shift();return stash('<pre><code>'+ls.join('\n')+'</code></pre>')});
+  s=s.replace(/`([^`\n]+)`/g,function(m,c){return stash('<code>'+c+'</code>')});
+  s=s.replace(/\[([^\]\n]{1,200})\]\(([^)\n]{1,500})\)/g,function(m,t,u){var v=u.replace(/&amp;/g,'&');return /^(https?:\/\/|mailto:|\/)/i.test(v)?'<a href="'+u+'" target="_blank" rel="noopener noreferrer">'+t+'</a>':t});
+  s=s.replace(/\*\*([^*\n]+)\*\*/g,'<strong>$1</strong>').replace(/__([^_\n]+)__/g,'<strong>$1</strong>').replace(/\*([^*\n]+)\*/g,'<em>$1</em>');
+  var out=[],ul=false,ol=false;
+  function close(){if(ul){out.push('</ul>');ul=false}if(ol){out.push('</ol>');ol=false}}
+  s.split('\n').forEach(function(line){
+    var t=line.trim();
+    if(!t){close();out.push('');return}
+    var pm=/^\u0001(\d+)\u0001$/.exec(t);
+    if(pm){close();out.push(store[+pm[1]]);return}
+    var h=/^(#{1,4})\s+(.+)$/.exec(t);
+    if(h){close();out.push('<h'+h[1].length+'>'+h[2]+'</h'+h[1].length+'>');return}
+    var li=/^[-*+]\s+(.+)$/.exec(t);
+    if(li){if(ol){out.push('</ol>');ol=false}if(!ul){out.push('<ul>');ul=true}out.push('<li>'+li[1]+'</li>');return}
+    var no=/^\d+[.)]\s+(.+)$/.exec(t);
+    if(no){if(ul){out.push('</ul>');ul=false}if(!ol){out.push('<ol>');ol=true}out.push('<li>'+no[1]+'</li>');return}
+    close();out.push('<p>'+t+'</p>');
+  });
+  close();
+  return out.join('\n').replace(/\u0001(\d+)\u0001/g,function(m,i){return store[+i]||''});
+}
+function add(t,c){var d=document.createElement('div');d.className='msg '+c;if(c==='bot'){d.classList.add('md');d.innerHTML=md(t)}else{d.textContent=t}chat.appendChild(d);chat.scrollTop=chat.scrollHeight;return d}
+function clearChat(){chat.innerHTML=''}
+
+/* ---------- 登录跳转：跳出 iframe + 回跳 ---------- */
+function goLogin(){
+  // 关键：用顶层页面的 origin + pathname，保证"在哪个域名登录就在哪个域名用"，
+  // 内外网 Cookie 不通用（内网 IP 登录态 ≠ 花生壳域名登录态）。
+  // Halo 2.20+ 回跳参数是 redirect_uri（不是 redirect）。
+  var top=window.top;
+  var origin=location.origin, here='/';
+  try{ origin=top.location.origin||origin; here=top.location.pathname||'/'; }catch(e){}
+  var loginUrl=origin+'/login?redirect_uri='+encodeURIComponent(here);
+  try{ top.location.href=loginUrl; }
+  catch(e){ window.open(loginUrl,'_blank'); }
+}
+
+/* ---------- 状态徽标 / 门页 ---------- */
+function renderBadge(){
+  badge.className='badge';
+  if(!state.loggedIn){badge.textContent='未登录';badge.classList.add('guest');loginLink.style.display='';return}
+  loginLink.style.display='none';
+  if(state.admin){badge.textContent='管理员 · 不限次数';badge.classList.add('admin');return}
+  if(state.remaining<=0){badge.textContent='次数已用完';badge.classList.add('zero');return}
+  badge.textContent='剩余 '+state.remaining+' 次';
+}
+function renderGate(kind,detail){
+  clearChat();
+  var g=document.createElement('div');g.className='gate';
+  if(kind==='guest'){
+    g.innerHTML='<h2>请先登录后再提问</h2>'+
+      '<p>本站 AI 问答仅对注册用户开放。登录后即可获得一次免费对话机会。</p>'+
+      '<div class="steps">1. 点击下方「前往登录 / 注册」<br>2. 用博客账号登录（没有就先注册）<br>3. 登录后会自动回到本页并识别身份</div>'+
+      '<button class="btn" onclick="goLogin()">前往登录 / 注册</button>';
+    if(detail)g.innerHTML+='<p style="font-size:12px;color:#6a8a7c;margin-top:14px">诊断：'+esc(detail)+'</p>';
+  }else if(kind==='noquota'){
+    g.innerHTML='<h2>对话次数已用完</h2>'+
+      '<p>你可以用以下方式各获得 +1 次对话机会：</p>'+
+      '<div class="steps">方法一：发布一篇文章，经站长审核通过后 +1 次<br>方法二：在任意文章下评论一次 +1 次<br><br>完成后回到本页点下方按钮刷新。</div>'+
+      '<button class="btn ghost" onclick="refresh()">我已完成，刷新状态</button>';
+  }
+  chat.appendChild(g);
+}
+function setInputEnabled(on){q.disabled=!on;btn.disabled=!on;if(!on)q.placeholder='请先登录并拥有对话次数';else q.placeholder='输入内容，回车发送'}
+
+/* ---------- 拉取状态（同源请求，浏览器自动带 Cookie） ---------- */
+function refresh(silent){
+  return fetch(API_BASE+'/status',{credentials:'same-origin',cache:'no-store'})
+    .then(function(r){
+      // 修复：先判 HTTP 状态。打到 Halo(28090) 时 /bot-api/status 返回 404，
+      // 旧逻辑把 JSON 里的 undefined.loggedIn 误判为「未登录」。这里直接拦截并给出明确诊断。
+      if(!r.ok) throw new Error('HTTP '+r.status+' · 问答服务暂不可达，请确认走 /bot 入口（内外网统一，无需改花生壳映射）');
+      return r.json();
+    })
+    .then(function(d){
+      // 修复：校验响应结构，只有明确的布尔 loggedIn 才算合法状态响应
+      if(!d || typeof d.loggedIn!=='boolean') throw new Error('状态响应异常（可能打到了 Halo 而非问答服务）：'+JSON.stringify(d).slice(0,120));
+      state=d;ready=true;renderBadge();
+      if(!d.loggedIn){renderGate('guest');setInputEnabled(false)}
+      else if(!d.admin&&d.remaining<=0){renderGate('noquota');setInputEnabled(false)}
+      else{
+        clearChat();
+        var hello=d.admin?'管理员模式，不限次数。有什么可以帮你？':'你好，你还有 '+d.remaining+' 次对话机会，请问想了解什么？';
+        add(hello,'bot');setInputEnabled(true);
+        if(!silent&&d.earned&&(d.earned.posts>0||d.earned.comments>0)) add('检测到你的文章/评论，已为你增加对话次数。','bot notice');
+      }
+    })
+    .catch(function(e){
+      badge.textContent='连接失败';badge.classList.add('guest');
+      ready=false;clearChat();
+      add('暂时无法连接问答服务：'+String(e&&e.message||e).slice(0,200),'bot err');
+      setInputEnabled(false);
+    });
+}
+
+/* ---------- 发送 ---------- */
+function send(){
+  if(!ready){refresh();return}
+  if(!state.loggedIn){renderGate('guest');setInputEnabled(false);return}
+  if(!state.admin&&state.remaining<=0){renderGate('noquota');setInputEnabled(false);return}
+  var text=q.value.trim();
+  if(!text){add('请输入内容','bot err');return}
+  if(busy)return;
+  q.value='';busy=true;btn.disabled=true;btn.textContent='请求中…';
+  add(text,'user');
+  var tip=add('正在生成回答…','typing');
+  fetch(API_BASE+'/chat',{
+    method:'POST',credentials:'same-origin',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({messages:[{role:'user',content:text}]})
+  }).then(function(r){return r.json().then(function(d){return {code:r.status,data:d}})})
+  .then(function(res){
+    if(tip&&tip.parentNode)tip.remove();
+    var d=res.data;
+    if(res.code===401){state.loggedIn=false;renderBadge();renderGate('guest');setInputEnabled(false);return}
+    if(res.code===403&&d.noQuota){state.remaining=0;renderBadge();renderGate('noquota');setInputEnabled(false);return}
+    if(res.code===502&&d.refunded&&typeof d.remaining==='number'){state.remaining=d.remaining;renderBadge();add((d.error||'AI 服务暂时不可用')+'（本次次数已退还，当前剩余 '+d.remaining+' 次）','bot notice');return}
+    if(res.code>=400){add(d.error||('调用失败（HTTP '+res.code+'）'),'bot err');return}
+    if(typeof d.reply==='string'){add(d.reply,'bot')}
+    else{add('返回内容异常，请稍后重试','bot err')}
+    if(typeof d.remaining==='number'){state.remaining=d.remaining;renderBadge();
+      if(!state.admin&&state.remaining<=0){setTimeout(function(){renderGate('noquota');setInputEnabled(false)},1500)}}
+  }).catch(function(e){
+    if(tip&&tip.parentNode)tip.remove();
+    add('连接失败：'+String(e&&e.message||e).slice(0,200),'bot err');
+  }).finally(function(){
+    busy=false;btn.textContent='发送';
+    if(state.loggedIn&&(state.admin||state.remaining>0)){btn.disabled=false;q.disabled=false;q.focus()}
+  });
+}
+
+add('正在检查登录状态…','bot notice');
+refresh(true);
+</script>
+</body>
+</html>
