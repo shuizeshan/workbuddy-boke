@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>水泽山分身 · AI 问答</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:system-ui,-apple-system,sans-serif;background:#0d1512;color:#cfe3d8;display:flex;flex-direction:column;height:100vh}
+  header{padding:14px 18px;background:#12211b;border-bottom:1px solid #1e3328}
+  header h1{font-size:16px;color:#7ec8e3}
+  header p{font-size:12px;color:#6a8a7c;margin-top:3px}
+  #chat{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px}
+  .msg{max-width:85%;padding:10px 14px;border-radius:12px;line-height:1.6;font-size:14px;white-space:pre-wrap;word-break:break-word}
+  .user{align-self:flex-end;background:#1e3a5f;color:#dbeafe;border-bottom-right-radius:3px}
+  .bot{align-self:flex-start;background:#16241d;border:1px solid #23402f;border-bottom-left-radius:3px}
+  .bot.err{color:#e8a0a0;border-color:#5a2a2a}
+  .typing{color:#6a8a7c;font-size:13px;align-self:flex-start}
+  footer{padding:12px;border-top:1px solid #1e3328;background:#12211b;display:flex;gap:8px}
+  input{flex:1;background:#0a120e;border:1px solid #2a4536;border-radius:8px;padding:10px 12px;color:#cfe3d8;font-size:14px;outline:none}
+  input:focus{border-color:#7ec8e3}
+  button{background:#1a4a5e;color:#fff;border:none;border-radius:8px;padding:10px 18px;font-size:14px;cursor:pointer}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  /* Markdown 渲染样式 */
+  .msg.md{white-space:normal}
+  .msg.md p{margin:0 0 6px}
+  .msg.md p:last-child{margin-bottom:0}
+  .msg.md h1,.msg.md h2,.msg.md h3,.msg.md h4{font-size:15px;color:#7ec8e3;margin:8px 0 4px}
+  .msg.md h1:first-child,.msg.md h2:first-child{margin-top:0}
+  .msg.md ul,.msg.md ol{margin:4px 0 6px 20px;padding:0}
+  .msg.md li{margin:2px 0}
+  .msg.md strong{color:#eaf7f0;font-weight:600}
+  .msg.md em{color:#a8d8c4}
+  .msg.md code{background:#0b1712;padding:1px 5px;border-radius:4px;font-family:ui-monospace,Consolas,monospace;font-size:12px;color:#9ad7c0}
+  .msg.md pre{background:#0a120e;border:1px solid #23402f;border-radius:8px;padding:10px;overflow-x:auto;margin:6px 0}
+  .msg.md pre code{background:none;padding:0;font-size:12px}
+  .msg.md a{color:#7ec8e3;text-decoration:underline;word-break:break-all}
+  @media(max-width:600px){.msg.md{font-size:13px}.msg.md ul,.msg.md ol{margin-left:16px}}
+</style>
+</head>
+<body>
+<header>
+  <h1>🤖 水泽山分身</h1>
+  <p>可咨询我的履历 模型(qwen3:1.7b)</p>
+</header>
+<div id="chat"></div>
+<footer>
+  <input id="q" placeholder="输入问题，例如：博主是做什么工作的？" onkeydown="if(event.key==='Enter')send()">
+  <button id="btn" onclick="send()">发送</button>
+</footer>
+<script>
+var API='http://<NAS_IP>:11434/api/chat';
+var MODEL='qwen3:1.7b';
+var KB='【知识库内容】\n# 关于水泽山\n我是水泽山，数字化管理师（DIGITAL MANAGEMENT SPECIALIST），13 年工作经验，现任某企业 IT 主管/项目经理。\n## 公司类型（回答任职经历时只说公司类型，不说公司名）\n- 当前任职：一家食品制造企业（涵盖生产、仓储、物流、销售、品控全链条）\n- 过往任职：一家酒店管理集团（旗下多家连锁酒店）、一家海鲜加工工厂；另有涉企政务项目经历（税务、消防系统维护）\n## 专业优势\n- 团队管理：软件销售服务团队 8 年管理经验，带过 20 人团队\n- 数字化转型：主导酒店集团 0 到 1 数字化建设（400 人以上规模）；海鲜工厂 0 到 1 数字化项目管理（150 人规模）\n- 系统建设：主导 ERP、WMS、MES、TMS、CRM、SRM、QMS 等企业系统的规划与落地，实现业务数据实时可视化，为管理层提供决策依据\n- 政务系统：税务、消防长期维护（货运系统、防伪税控、金三系统、消防宜搭等）\n- 培训与运维：企业/消防软件培训（1 对 1、1 对多）；企业软硬件资产采购、测试、管理与全周期登记\n- 流程优化：整合多套架构为统一管理，解决考勤、重复付款报销、一码多用等问题；引入 RPA 自动化与知识库建设\n- 个人特质：ISTJ，自驱自适、抗压性好、稳定性高，技能可快速学习运用\n## 证书与技能\n- 证书：钉钉低代码开发师高级、钉钉数字化管理师、钉钉数字化人事管理师、龙江数字化管理师、华为数通网络层协议基础微认证、阿里云 Apsara Clouder 专项技能认证\n- 工具：钉钉全维度建设、扣子工作流、数字化管理师（中级/高级研修）、飞书、影刀 RPA、帆软 BI、XMind、MySQL、Python 基础、Linux 学习中\n## 关于这个博客\n- 博客地址：https://<你的壳域名>\n- 博客主题：用流程与数据，把复杂变简单\n- 内容方向：企业流程数字化、OA 审批与智能表格上的实践与思考\n- 运行环境：飞牛 NAS（fnOS），Docker 部署 Halo 博客 2.27.3，花生壳内网穿透\n## 常见问题\n问：博客用什么技术搭建的？答：飞牛 NAS 上用 Docker 部署开源博客系统 Halo（2.27.3 版），数据库是 PostgreSQL，通过花生壳内网穿透实现外网访问。\n问：如何联系博主？答：可在博客文章下留言评论。\n【知识库结束】';
+var SYS='你是「水泽山」个人博客的问答助手。知识库中已加入我的个人简历；回答涉及任职经历或需要说明所属公司时，只以公司类型表述，不得出现具体公司名称、简称、英文名或别称；若知识库未提供公司类型，回答"这个我还不清楚"。\n始终用简体中文回答，无论用户使用什么语言。回答只能依据知识库中检索到的内容；知识库没有的信息，直接回答"这个我还不清楚"，不得编造、猜测或借助训练记忆补充。\n你没有任何工具可用，禁止调用工具、函数或插件，禁止生成任何工具调用格式的结构化内容。回答要简洁专业，使用短段落或列表，单次不超过300字，不展示思考过程。遇到与博客、博主或知识库无关的请求，礼貌说明职责范围，并引导用户提出相关问题。\n/no_think\n'+KB;
+var chat=document.getElementById('chat'),q=document.getElementById('q'),btn=document.getElementById('btn');
+
+/* 轻量 Markdown 渲染：先转义防 XSS，再解析有限语法（标题/粗体/链接/列表/代码块） */
+function esc(s){return String(s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
+function md(src){
+  var s=esc(src),store=[];
+  function stash(h){store.push(h);return '\u0001'+ (store.length-1) +'\u0001'}
+  s=s.replace(/```([\s\S]*?)```/g,function(m,c){var ls=c.split('\n');if(ls.length&&/^[a-zA-Z0-9+#.\-]*$/.test(ls[0].trim())&&ls[0].trim())ls.shift();return stash('<pre><code>'+ls.join('\n')+'</code></pre>')});
+  s=s.replace(/`([^`\n]+)`/g,function(m,c){return stash('<code>'+c+'</code>')});
+  s=s.replace(/\[([^\]\n]{1,200})\]\(([^)\n]{1,500})\)/g,function(m,t,u){var v=u.replace(/&amp;/g,'&');return /^(https?:\/\/|mailto:|\/)/i.test(v)?'<a href="'+u+'" target="_blank" rel="noopener noreferrer">'+t+'</a>':t});
+  s=s.replace(/\*\*([^*\n]+)\*\*/g,'<strong>$1</strong>').replace(/__([^_\n]+)__/g,'<strong>$1</strong>').replace(/\*([^*\n]+)\*/g,'<em>$1</em>');
+  var out=[],ul=false,ol=false;
+  function close(){if(ul){out.push('</ul>');ul=false}if(ol){out.push('</ol>');ol=false}}
+  s.split('\n').forEach(function(line){
+    var t=line.trim();
+    if(!t){close();out.push('');return}
+    var pm=/^\u0001(\d+)\u0001$/.exec(t);
+    if(pm){close();out.push(store[+pm[1]]);return}
+    var h=/^(#{1,4})\s+(.+)$/.exec(t);
+    if(h){close();out.push('<h'+h[1].length+'>'+h[2]+'</h'+h[1].length+'>');return}
+    var li=/^[-*+]\s+(.+)$/.exec(t);
+    if(li){if(ol){out.push('</ol>');ol=false}if(!ul){out.push('<ul>');ul=true}out.push('<li>'+li[1]+'</li>');return}
+    var no=/^\d+[.)]\s+(.+)$/.exec(t);
+    if(no){if(ul){out.push('</ul>');ul=false}if(!ol){out.push('<ol>');ol=true}out.push('<li>'+no[1]+'</li>');return}
+    close();out.push('<p>'+t+'</p>');
+  });
+  close();
+  return out.join('\n').replace(/\u0001(\d+)\u0001/g,function(m,i){return store[+i]||''});
+}
+function add(t,c){var d=document.createElement('div');d.className='msg '+c;if(c==='bot'&&!/(^|\s)err(\s|$)/.test(c)){d.classList.add('md');d.innerHTML=md(t)}else{d.textContent=t}chat.appendChild(d);chat.scrollTop=chat.scrollHeight;return d}
+function send(){var t=q.value.trim();if(!t||btn.disabled)return;add(t,'user');q.value='';btn.disabled=true;var tip=add('思考中…','typing');
+fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:MODEL,stream:false,messages:[{role:'system',content:SYS},{role:'user',content:t}]})})
+.then(function(r){return r.json()}).then(function(d){tip.remove();
+var a=d.message?d.message.content:(d.error?('出错：'+(d.error.message||JSON.stringify(d.error))):('异常响应：'+JSON.stringify(d).slice(0,200)));
+add(a||'(空回答)',d.message?'bot':'bot err')})
+.catch(function(e){tip.remove();add('连接失败：'+e.message+'（检查 NAS 服务是否在线）','bot err')})
+.finally(function(){btn.disabled=false;q.focus()})}
+add('你好！我是水泽山分身！','bot');
+</script>
+</body>
+</html>
